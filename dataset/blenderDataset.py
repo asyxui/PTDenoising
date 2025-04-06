@@ -26,7 +26,8 @@ def render_and_save(output_path, filename, samples, denoise=False):
     scene.cycles.use_denoising = denoise  # Enable denoising if needed
     scene.render.filepath = os.path.join(output_path, filename)
     scene.render.image_settings.file_format = 'PNG'
-
+    scene.render.resolution_x = 1024
+    scene.render.resolution_y = 1024
     print(f"Rendering: {filename} with {samples} samples")
     bpy.ops.render.render(write_still=True)
 
