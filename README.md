@@ -1,7 +1,9 @@
 # Path Tracing Denoiser
 
 ## How to setup Python
-If you don't have Python installed already, download it from https://www.python.org/downloads/
+If you don't have Python 3.11 installed already, download it from https://www.python.org/downloads/release/python-3110/
+
+Specifically Python 3.11 is required for blender.
 
 1. Create a virtual environment in the root folder of the project.
 ```sh
