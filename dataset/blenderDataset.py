@@ -37,7 +37,7 @@ def render_and_save(output_path, filename, samples, denoise=False):
     else:
         print(f"ERROR: Image {filename} was NOT saved!")
 
-def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 50], clean_samples=50):
+def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200], clean_samples=100):
     """Load each scene once and render multiple images without reloading."""
     blend_files = glob.glob(os.path.join(scene_folder, "*.blend"))
 
@@ -55,12 +55,15 @@ def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 50], 
         os.makedirs(noisy_dir, exist_ok=True)
         os.makedirs(clean_dir, exist_ok=True)
 
-        # Render multiple noisy images (without reloading)
-        for samples in noisy_samples_list:
-            render_and_save(noisy_dir, f"{scene_name}_noisy_{samples}.png", samples, denoise=False)
+        camera_objects = [obj for obj in bpy.data.objects if obj.type == 'CAMERA']
 
-        # Render Ground Truth (denoised)
-        render_and_save(clean_dir, f"{scene_name}_clean.png", clean_samples, denoise=True)
+        for i, camera in enumerate(camera_objects):
+            bpy.context.scene.camera = camera  # Set active camera
+            bpy.context.view_layer.update()
+
+            for samples in noisy_samples_list:
+                render_and_save(noisy_dir, f"{scene_name}_cam_{i}_noisy_{samples}.png", samples, denoise=False)
+            render_and_save(clean_dir, f"{scene_name}_cam_{i}_clean.png", clean_samples, denoise=True)
 
         print(f"Finished rendering for {scene_name}\n")
 
