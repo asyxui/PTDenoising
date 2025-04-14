@@ -29,6 +29,11 @@ def setup_cycles():
     scene.cycles.use_denoising = False  # Default to off
     scene.cycles.use_adaptive_sampling = False  # Ensure consistency
 
+    # Force resolution to be 1024x1024 every time
+    scene.render.resolution_x = 1024
+    scene.render.resolution_y = 1024
+    scene.render.resolution_percentage = 100
+
     # Force Blender to recognize changes
     bpy.context.view_layer.update()
 
