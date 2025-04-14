@@ -16,8 +16,7 @@ def enable_gpu_rendering():
 
     print("Compute Device Type:", prefs.compute_device_type)
     for device in prefs.devices:
-        if device.type == 'OPTIX':
-            device.use = True
+        device.use = True
         print(f"{device.name} | Type: {device.type} | Use: {device.use}")
 
     bpy.context.scene.cycles.device = 'GPU'
