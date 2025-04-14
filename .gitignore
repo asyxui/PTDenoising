@@ -175,6 +175,4 @@ cython_debug/
 
 noisy/
 ground_truth/
-BarcelonaPavilion.blend
-flat-archiviz.blend
-barbershop_interior.blend
+scenes/

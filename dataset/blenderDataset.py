@@ -51,7 +51,7 @@ def render_and_save(output_path, filename, samples, denoise=False):
     else:
         print(f"ERROR: Image {filename} was NOT saved!")
 
-def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200, 500], clean_samples=200):
+def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200, 500], clean_samples=100):
     """Load each scene once and render multiple images without reloading."""
     blend_files = glob.glob(os.path.join(scene_folder, "*.blend"))
 

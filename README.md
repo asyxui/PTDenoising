@@ -32,3 +32,4 @@ pip install -r requirements.txt
 ```sh
 blender -b -P .\blenderDataset.py
 ```
+Some demo scenes are provided in ./dataset/scenes. Additional blender scenes may be added to expand the dataset. I suggest packing all resources into the .blend files.
