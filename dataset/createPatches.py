@@ -15,7 +15,7 @@ os.makedirs(patch_gt_dir, exist_ok=True)
 patch_size = 256
 skip_counter = 0
 
-def create_patches(input_dir, output_dir, tag):
+def create_patches(input_dir, output_dir):
     image_files = [f for f in os.listdir(input_dir) if f.lower().endswith(('.png', '.jpg'))]
 
     for img_file in image_files:
@@ -33,14 +33,14 @@ def create_patches(input_dir, output_dir, tag):
         for row in range(0, 1024, patch_size):
             for col in range(0, 1024, patch_size):
                 patch = img.crop((col, row, col + patch_size, row + patch_size))
-                patch_filename = f"{base}_{tag}_patch_{patch_id}.png"
+                patch_filename = f"{base}_patch_{patch_id}.png"
                 patch.save(os.path.join(output_dir, patch_filename))
                 patch_id += 1
 
         print(f"Processed {img_file} -> {patch_id} patches")
 
 # Create patches independently
-create_patches(noisy_dir, patch_noisy_dir, "noisy")
-create_patches(gt_dir, patch_gt_dir, "clean")
+create_patches(noisy_dir, patch_noisy_dir)
+create_patches(gt_dir, patch_gt_dir)
 
 print(f"All patches generated. {skip_counter} images were skipped.")

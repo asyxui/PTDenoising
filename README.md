@@ -33,3 +33,24 @@ pip install -r requirements.txt
 blender -b -P .\blenderDataset.py
 ```
 Some demo scenes are provided in ./dataset/scenes. Additional blender scenes may be added to expand the dataset. I suggest packing all resources into the .blend files.
+
+Once the dataset is created, it can be patched into smaller images for the models using the createPatches.py
+```sh
+python ./createPatches.py
+```
+
+## Train a model
+After generating the dataset a model can be trained like so:
+```sh
+cd src
+python autoencoder.py
+```
+To test the model use:
+```sh
+python testModel.py
+```
+Stats about the model can be viewed with TensorBoard
+```sh
+tensorboard --logdir=runs
+```
+then go to http://localhost:6006
