@@ -8,6 +8,20 @@ def load_blend_file(filepath):
     bpy.ops.wm.open_mainfile(filepath=filepath)
     print(f"Loaded: {filepath}")
 
+def enable_gpu_rendering():
+    """Set device type to OPTIX"""
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    prefs.compute_device_type = 'OPTIX' # or 'CUDA'
+    prefs.get_devices()
+
+    print("Compute Device Type:", prefs.compute_device_type)
+    for device in prefs.devices:
+        if device.type == 'OPTIX':
+            device.use = True
+        print(f"{device.name} | Type: {device.type} | Use: {device.use}")
+
+    bpy.context.scene.cycles.device = 'GPU'
+
 def setup_cycles():
     """Initial setup of Cycles settings without modifying samples repeatedly."""
     scene = bpy.context.scene
@@ -37,7 +51,7 @@ def render_and_save(output_path, filename, samples, denoise=False):
     else:
         print(f"ERROR: Image {filename} was NOT saved!")
 
-def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200], clean_samples=100):
+def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200, 500], clean_samples=200):
     """Load each scene once and render multiple images without reloading."""
     blend_files = glob.glob(os.path.join(scene_folder, "*.blend"))
 
@@ -45,8 +59,8 @@ def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 5
         scene_name = os.path.splitext(os.path.basename(blend_file))[0]
         print(f"\nProcessing scene: {scene_name}")
 
-        # Load scene ONCE
         load_blend_file(blend_file)
+        enable_gpu_rendering()
         setup_cycles()  # Set general Cycles settings (without modifying samples)
 
         # Create output directories
@@ -70,6 +84,8 @@ def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 5
 # Set paths
 scene_folder = os.getcwd() + "/scenes"
 output_directory = os.getcwd()
+
+enable_gpu_rendering()
 
 # Run batch processing
 process_scenes(scene_folder, output_directory)
