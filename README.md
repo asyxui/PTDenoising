@@ -43,7 +43,7 @@ python ./createPatches.py
 After generating the dataset a model can be trained like so:
 ```sh
 cd src
-python autoencoder.py
+python autoencoder.py <num_epochs> # num_epochs may be omitted, defaults to 20
 ```
 To test the model use:
 ```sh

@@ -9,13 +9,13 @@ from autoencoder import DenoisingAutoencoder
 # ------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = DenoisingAutoencoder().to(device)
-model.load_state_dict(torch.load("autoencoder_denoiser.pth", map_location=device))
+model.load_state_dict(torch.load("./models/autoencoder_denoiser_L1SSIM_150.pth", map_location=device))
 model.eval()
 
 # ------------------------------
 # 2. Load and preprocess a noisy image
 # ------------------------------
-image_path = "./data/noisy_sample.png"
+image_path = "./data/noisy_corner.png"
 
 transform = transforms.Compose([
     transforms.ToTensor()
@@ -36,6 +36,6 @@ with torch.no_grad():
 output_image = transforms.ToPILImage()(output_tensor.squeeze().cpu())
 
 # Option A: Save it
-output_path = "./data/denoised_sample.png"
+output_path = "./data/L1SSIMLoss_Shallow/denoised_corner_150.png"
 output_image.save(output_path)
 print(f"Denoised image saved to {output_path}")

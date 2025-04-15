@@ -1,8 +1,10 @@
 import os
+import sys
 from PIL import Image
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from pytorch_msssim import ssim
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
@@ -79,7 +81,7 @@ class DenoisingAutoencoder(nn.Module):
 def train_autoencoder():
     # Hyperparameters
     batch_size = 32
-    num_epochs = 20
+    num_epochs = int(sys.argv[1]) if len(sys.argv) > 1 else 20
     learning_rate = 1e-3
 
     # Dataset
@@ -90,7 +92,6 @@ def train_autoencoder():
     # Device, model, loss, optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder().to(device)
-    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # TensorBoard writer
@@ -107,7 +108,7 @@ def train_autoencoder():
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
 
             outputs = model(noisy_imgs)
-            loss = criterion(outputs, clean_imgs)
+            loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))  # nn.MSELoss(outputs, clean_imgs)
 
             optimizer.zero_grad()
             loss.backward()
@@ -118,9 +119,14 @@ def train_autoencoder():
         avg_loss = running_loss / len(dataloader)
         print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.6f}")
         writer.add_scalar("Loss/train", avg_loss, epoch + 1)
+        
+        if epoch % 5 == 0:  # Every 5 epochs
+            writer.add_images("Noisy", noisy_imgs[:4], epoch + 1)
+            writer.add_images("Denoised", outputs[:4], epoch + 1)
+            writer.add_images("GroundTruth", clean_imgs[:4], epoch + 1)
 
     writer.close()
-    torch.save(model.state_dict(), "autoencoder_denoiser.pth")
+    torch.save(model.state_dict(), f"autoencoder_denoiser_L1SSIM_{num_epochs}.pth")
     print("Model saved and TensorBoard log complete.")
 
 # ------------------------------
