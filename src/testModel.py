@@ -2,7 +2,7 @@ import torch
 from torchvision import transforms
 from PIL import Image
 
-from autoencoder import DenoisingAutoencoder
+from autoencoder_shallow import DenoisingAutoencoder
 
 # ------------------------------
 # 1. Load the model
@@ -15,7 +15,7 @@ model.eval()
 # ------------------------------
 # 2. Load and preprocess a noisy image
 # ------------------------------
-image_path = "./data/noisy_corner.png"
+image_path = "./data/[MySimsWorld]LibraryHall_cam_0_noisy_5_patch_6.png"
 
 transform = transforms.Compose([
     transforms.ToTensor()
@@ -36,6 +36,6 @@ with torch.no_grad():
 output_image = transforms.ToPILImage()(output_tensor.squeeze().cpu())
 
 # Option A: Save it
-output_path = "./data/L1SSIMLoss_Shallow/denoised_corner_150.png"
+output_path = "./data/L1SSIMLoss_Shallow/[MySimsWorld]LibraryHall_cam_0_noisy_5_patch_6_150.png"
 output_image.save(output_path)
 print(f"Denoised image saved to {output_path}")
