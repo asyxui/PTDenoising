@@ -2,7 +2,7 @@
 
 ## Dataset
 This project uses a custom dataset consisting of noisy and ground truth image pairs for training a denoising autoencoder. The images are rendered using Blender's Cycles path tracer.
-- Noisy images: Rendered at low sample counts (e.g. 2, 5, 10, 50, 100, 200, 500 samples).
+- Noisy images: Rendered at low sample counts (2, 5, 10, 50, 100, 200, 500 samples).
 - Ground truth images: Rendered at a high sample count with the built-in Blender denoiser enabled to approximate clean results.
 
 ![visualization of noise levels](./docs/dataset_visualization.png)
@@ -54,7 +54,7 @@ After generating the dataset a model can be trained like so:
 cd src
 python autoencoder_skip_connections.py <num_epochs> --tune
 ```
---tune optimizes the hyperparameters before training
+--tune optimizes the hyperparameters before training, this takes a long time.
 
 To test the model use:
 ```sh

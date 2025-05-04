@@ -140,9 +140,13 @@ class DenoisingAutoencoder(nn.Module):
 # ------------------------------
 def objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     base_channels = trial.suggest_categorical("base_channels", [32, 64, 128])
-    l1_weight = trial.suggest_uniform("l1_weight", 0.5, 1.0)
+    l1_weight = trial.suggest_float("l1_weight", 0.5, 1.0)
+    beta1 = trial.suggest_float("beta1", 0.8, 0.99)
+    beta2 = trial.suggest_float("beta2", 0.9, 0.999)
+    eps = trial.suggest_float("eps", 1e-9, 1e-6, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
 
     transform = transforms.ToTensor()
     dataset = NoisyCleanPatchDataset("../dataset/patches/noisy", "../dataset/patches/ground_truth", transform)
@@ -150,7 +154,7 @@ def objective(trial):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=base_channels).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, betas=(beta1, beta2), eps=eps, weight_decay=weight_decay)
     writer = SummaryWriter(log_dir=f"./runs/optuna_trial_{trial.number}")
 
     num_epochs = 10
@@ -170,11 +174,9 @@ def objective(trial):
         avg_loss = running_loss / len(dataloader)
         writer.add_scalar("Loss/train", avg_loss, epoch)
 
+    for key, val in trial.params.items():
+        writer.add_scalar(f"Hyperparams/{key}", val, trial.number)
     writer.add_scalar("Trial/val_loss", avg_loss, trial.number)
-    writer.add_scalar("Hyperparams/lr", lr, trial.number)
-    writer.add_scalar("Hyperparams/batch_size", batch_size, trial.number)
-    writer.add_scalar("Hyperparams/base_channels", base_channels, trial.number)
-    writer.add_scalar("Hyperparams/l1_weight", l1_weight, trial.number)
 
     writer.close()
     return avg_loss

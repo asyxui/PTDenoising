@@ -35,7 +35,6 @@ with torch.no_grad():
 # ------------------------------
 output_image = transforms.ToPILImage()(output_tensor.squeeze().cpu())
 
-# Option A: Save it
 output_path = "./data/L1SSIMLoss_Shallow/[MySimsWorld]LibraryHall_cam_0_noisy_5_patch_6_150.png"
 output_image.save(output_path)
 print(f"Denoised image saved to {output_path}")
