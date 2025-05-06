@@ -1,19 +1,18 @@
 import os
 from PIL import Image
 
-# Input folders
-noisy_dir = "./noisy"
-gt_dir = "./ground_truth"
-
-# Output folders
-patch_noisy_dir = "./patches/noisy"
-patch_gt_dir = "./patches/ground_truth"
-os.makedirs(patch_noisy_dir, exist_ok=True)
-os.makedirs(patch_gt_dir, exist_ok=True)
+# Base input and output folders
+base_noisy_dir = "./noisy"
+base_gt_dir = "./ground_truth"
+patch_base_noisy_dir = "./patches/noisy"
+patch_base_gt_dir = "./patches/ground_truth"
 
 # Patch size
 patch_size = 256
 skip_counter = 0
+
+# Create patches for each dataset split
+splits = ["train", "val", "test"]
 
 def create_patches(input_dir, output_dir):
     image_files = [f for f in os.listdir(input_dir) if f.lower().endswith(('.png', '.jpg'))]
@@ -40,7 +39,17 @@ def create_patches(input_dir, output_dir):
         print(f"Processed {img_file} -> {patch_id} patches")
 
 # Create patches independently
-create_patches(noisy_dir, patch_noisy_dir)
-create_patches(gt_dir, patch_gt_dir)
+for split in splits:
+    noisy_dir = os.path.join(base_noisy_dir, split)
+    gt_dir = os.path.join(base_gt_dir, split)
+    patch_noisy_dir = os.path.join(patch_base_noisy_dir, split)
+    patch_gt_dir = os.path.join(patch_base_gt_dir, split)
+
+    os.makedirs(patch_noisy_dir, exist_ok=True)
+    os.makedirs(patch_gt_dir, exist_ok=True)
+
+    print(f"\nProcessing {split} set:")
+    create_patches(noisy_dir, patch_noisy_dir)
+    create_patches(gt_dir, patch_gt_dir)
 
 print(f"All patches generated. {skip_counter} images were skipped.")

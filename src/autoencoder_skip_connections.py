@@ -85,20 +85,20 @@ class DenoisingAutoencoder(nn.Module):
         super().__init__()
 
         self.encoder_blocks = nn.ModuleList([
-            DoubleConv(3, base_channels),
-            DoubleConv(base_channels, base_channels * 2),
-            DoubleConv(base_channels * 2, base_channels * 4),
-            DoubleConv(base_channels * 4, base_channels * 8),
+            DoubleConv(3, base_channels),                       # 256x256 -> 128x128
+            DoubleConv(base_channels, base_channels * 2),       # 128x128 -> 64x64
+            DoubleConv(base_channels * 2, base_channels * 4),   # 64x64   -> 32x32
+            DoubleConv(base_channels * 4, base_channels * 8),   # 32x32   -> 16x16
         ])
         self.pool = nn.MaxPool2d(2)
 
         self.bottleneck = DoubleConv(base_channels * 8, base_channels * 16)
 
         self.upconvs = nn.ModuleList([
-            nn.ConvTranspose2d(base_channels * 16, base_channels * 8, kernel_size=2, stride=2),
-            nn.ConvTranspose2d(base_channels * 8, base_channels * 4, kernel_size=2, stride=2),
-            nn.ConvTranspose2d(base_channels * 4, base_channels * 2, kernel_size=2, stride=2),
-            nn.ConvTranspose2d(base_channels * 2, base_channels, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(base_channels * 16, base_channels * 8, kernel_size=2, stride=2), # 16x16   -> 32x32
+            nn.ConvTranspose2d(base_channels * 8, base_channels * 4, kernel_size=2, stride=2),  # 32x32   -> 64x64
+            nn.ConvTranspose2d(base_channels * 4, base_channels * 2, kernel_size=2, stride=2),  # 64x64   -> 128x128
+            nn.ConvTranspose2d(base_channels * 2, base_channels, kernel_size=2, stride=2),      # 128x128 -> 256x256
         ])
         self.decoder_blocks = nn.ModuleList([
             DoubleConv(base_channels * 16, base_channels * 8),
@@ -149,8 +149,10 @@ def objective(trial):
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
 
     transform = transforms.ToTensor()
-    dataset = NoisyCleanPatchDataset("../dataset/patches/noisy", "../dataset/patches/ground_truth", transform)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/train", "../dataset/patches/ground_truth/train", transform)
+    val_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/val", "../dataset/patches/ground_truth/val", transform)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=base_channels).to(device)
@@ -159,27 +161,35 @@ def objective(trial):
 
     num_epochs = 10
     for epoch in range(num_epochs):
-        running_loss = 0.0
-        for noisy_imgs, clean_imgs in dataloader:
+        model.train()
+        train_loss = 0.0
+        for noisy_imgs, clean_imgs in train_loader:
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
             outputs = model(noisy_imgs)
             loss = l1_weight * nn.L1Loss()(outputs, clean_imgs) + (1 - l1_weight) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            train_loss += loss.item()
+        train_loss /= len(train_loader)
+        writer.add_scalar("Loss/train", train_loss, epoch)
 
-            running_loss += loss.item()
-
-        avg_loss = running_loss / len(dataloader)
-        writer.add_scalar("Loss/train", avg_loss, epoch)
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for noisy_imgs, clean_imgs in val_loader:
+                noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
+                outputs = model(noisy_imgs)
+                loss = l1_weight * nn.L1Loss()(outputs, clean_imgs) + (1 - l1_weight) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+                val_loss += loss.item()
+        val_loss /= len(val_loader)
+        writer.add_scalar("Loss/val", val_loss, epoch)
 
     for key, val in trial.params.items():
         writer.add_scalar(f"Hyperparams/{key}", val, trial.number)
-    writer.add_scalar("Trial/val_loss", avg_loss, trial.number)
-
+    writer.add_scalar("Trial/val_loss", val_loss, trial.number)
     writer.close()
-    return avg_loss
+    return val_loss
 
 # ------------------------------
 # Run Optuna & Final Training
@@ -202,8 +212,10 @@ if __name__ == "__main__":
         print("Loaded best hyperparameters from config file.")
 
     transform = transforms.ToTensor()
-    dataset = NoisyCleanPatchDataset("../dataset/patches/noisy", "../dataset/patches/ground_truth", transform)
-    dataloader = DataLoader(dataset, batch_size=best_params["batch_size"], shuffle=True)
+    train_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/train", "../dataset/patches/ground_truth/train", transform)
+    val_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/val", "../dataset/patches/ground_truth/val", transform)
+    train_loader = DataLoader(train_dataset, batch_size=best_params["batch_size"], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=best_params["batch_size"], shuffle=False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=best_params["base_channels"]).to(device)
@@ -211,19 +223,40 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir="./runs/final_training")
 
     for epoch in range(NUM_EPOCHS):
-        running_loss = 0.0
-        for noisy_imgs, clean_imgs in dataloader:
+        model.train()
+        train_loss = 0.0
+        for noisy_imgs, clean_imgs in train_loader:
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
             outputs = model(noisy_imgs)
             loss = best_params["l1_weight"] * nn.L1Loss()(outputs, clean_imgs) + (1 - best_params["l1_weight"]) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            train_loss += loss.item()
+        train_loss /= len(train_loader)
+        writer.add_scalar("Loss/train", train_loss, epoch)
 
-            running_loss += loss.item()
-
-        avg_loss = running_loss / len(dataloader)
-        writer.add_scalar("Loss/train", avg_loss, epoch)
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for noisy_imgs, clean_imgs in val_loader:
+                noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
+                outputs = model(noisy_imgs)
+                loss = best_params["l1_weight"] * nn.L1Loss()(outputs, clean_imgs) + (1 - best_params["l1_weight"]) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+                val_loss += loss.item()
+        val_loss /= len(val_loader)
+        writer.add_scalar("Loss/val", val_loss, epoch)
 
     writer.close()
+    dummy_input = torch.randn(1, 3, 256, 256).to(device)
+    onnx_path = "denoising_autoencoder.onnx"
+    torch.onnx.export(
+        model,
+        dummy_input,
+        onnx_path,
+        input_names=["noisy_input"],
+        output_names=["denoised_output"],
+        dynamic_axes={"noisy_input": {0: "batch_size"}, "denoised_output": {0: "batch_size"}},
+        opset_version=17
+    )
+    print(f"Model exported to {onnx_path}")

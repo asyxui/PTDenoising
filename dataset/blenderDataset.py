@@ -25,16 +25,12 @@ def setup_cycles():
     """Initial setup of Cycles settings without modifying samples repeatedly."""
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
-    scene.cycles.device = 'GPU'  # Change to 'CPU' if needed
-    scene.cycles.use_denoising = False  # Default to off
-    scene.cycles.use_adaptive_sampling = False  # Ensure consistency
-
-    # Force resolution to be 1024x1024 every time
+    scene.cycles.device = 'GPU' # Change to 'CPU' if needed
+    scene.cycles.use_denoising = False
+    scene.cycles.use_adaptive_sampling = False
     scene.render.resolution_x = 1024
     scene.render.resolution_y = 1024
     scene.render.resolution_percentage = 100
-
-    # Force Blender to recognize changes
     bpy.context.view_layer.update()
 
 def render_and_save(output_path, filename, samples, denoise=False):
@@ -55,41 +51,42 @@ def render_and_save(output_path, filename, samples, denoise=False):
     else:
         print(f"ERROR: Image {filename} was NOT saved!")
 
-def process_scenes(scene_folder, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200, 500], clean_samples=100):
+def process_split(split_folder, split_name, output_dir, noisy_samples_list=[2, 5, 10, 25, 50, 100, 200, 500], clean_samples=100):
     """Load each scene once and render multiple images without reloading."""
-    blend_files = glob.glob(os.path.join(scene_folder, "*.blend"))
+    blend_files = glob.glob(os.path.join(split_folder, "*.blend"))
 
     for blend_file in blend_files:
         scene_name = os.path.splitext(os.path.basename(blend_file))[0]
-        print(f"\nProcessing scene: {scene_name}")
+        print(f"\nProcessing scene: {scene_name} ({split_name})")
 
         load_blend_file(blend_file)
         enable_gpu_rendering()
-        setup_cycles()  # Set general Cycles settings (without modifying samples)
+        setup_cycles()
 
-        # Create output directories
-        noisy_dir = os.path.join(output_dir, "noisy")
-        clean_dir = os.path.join(output_dir, "ground_truth")
+        noisy_dir = os.path.join(output_dir, "noisy", split_name)
+        clean_dir = os.path.join(output_dir, "ground_truth", split_name)
         os.makedirs(noisy_dir, exist_ok=True)
         os.makedirs(clean_dir, exist_ok=True)
 
         camera_objects = [obj for obj in bpy.data.objects if obj.type == 'CAMERA']
 
         for i, camera in enumerate(camera_objects):
-            bpy.context.scene.camera = camera  # Set active camera
+            bpy.context.scene.camera = camera
             bpy.context.view_layer.update()
 
             for samples in noisy_samples_list:
                 render_and_save(noisy_dir, f"{scene_name}_cam_{i}_noisy_{samples}.png", samples, denoise=False)
             render_and_save(clean_dir, f"{scene_name}_cam_{i}_clean.png", clean_samples, denoise=True)
 
-        print(f"Finished rendering for {scene_name}\n")
+        print(f"Finished rendering for {scene_name} ({split_name})\n")
 
-# Set paths
-scene_folder = os.getcwd() + "/scenes"
+# Main execution
+base_scene_folder = os.path.join(os.getcwd(), "scenes")
 output_directory = os.getcwd()
 
-enable_gpu_rendering()
-
-# Run batch processing
-process_scenes(scene_folder, output_directory)
+for split in ["train", "val", "test"]:
+    split_folder = os.path.join(base_scene_folder, split)
+    if os.path.exists(split_folder):
+        process_split(split_folder, split, output_directory)
+    else:
+        print(f"Skipping missing split folder: {split_folder}")
