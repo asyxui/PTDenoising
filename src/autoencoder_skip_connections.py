@@ -12,8 +12,6 @@ from pytorch_msssim import ssim
 from torch.utils.tensorboard import SummaryWriter
 from optuna.integration.tensorboard import TensorBoardCallback
 
-CONFIG_PATH = "./best_hyperparams.json"
-
 # ------------------------------
 # CLI Argument Parsing
 # ------------------------------
@@ -23,6 +21,9 @@ parser.add_argument("epochs", type=int, nargs="?", default=50, help="Number of e
 args = parser.parse_args()
 USE_OPTUNA = args.tune
 NUM_EPOCHS = args.epochs
+
+CONFIG_PATH = "./config/best_hyperparams.json"
+ONNX_PATH = f"./models/denoising_autoencoder_{NUM_EPOCHS}.onnx"
 
 # ------------------------------
 # Dataset Loader
@@ -142,7 +143,6 @@ def objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     base_channels = trial.suggest_categorical("base_channels", [32, 64, 128])
-    l1_weight = trial.suggest_float("l1_weight", 0.5, 1.0)
     beta1 = trial.suggest_float("beta1", 0.8, 0.99)
     beta2 = trial.suggest_float("beta2", 0.9, 0.999)
     eps = trial.suggest_float("eps", 1e-9, 1e-6, log=True)
@@ -166,7 +166,7 @@ def objective(trial):
         for noisy_imgs, clean_imgs in train_loader:
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
             outputs = model(noisy_imgs)
-            loss = l1_weight * nn.L1Loss()(outputs, clean_imgs) + (1 - l1_weight) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+            loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -180,7 +180,7 @@ def objective(trial):
             for noisy_imgs, clean_imgs in val_loader:
                 noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
                 outputs = model(noisy_imgs)
-                loss = l1_weight * nn.L1Loss()(outputs, clean_imgs) + (1 - l1_weight) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+                loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
@@ -199,7 +199,7 @@ if __name__ == "__main__":
         study_name = "denoising_autoencoder_study"
         storage = "sqlite:///optuna_study.db"
         study = optuna.create_study(direction="minimize", study_name=study_name, storage=storage, load_if_exists=True)
-        tb_callback = TensorBoardCallback("./optuna_tensorboard", metric_name="val_loss")
+        tb_callback = TensorBoardCallback("./runs/optuna_tensorboard", metric_name="val_loss")
         study.optimize(objective, n_trials=30, callbacks=[tb_callback])
 
         best_params = study.best_trial.params
@@ -219,8 +219,17 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=best_params["base_channels"]).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=best_params["lr"])
+    optimizer = optim.Adam(
+        model.parameters(), 
+        lr=best_params["lr"], 
+        betas=(best_params["beta1"], best_params["beta2"]), 
+        eps=best_params["eps"], 
+        weight_decay=best_params["weight_decay"])
     writer = SummaryWriter(log_dir="./runs/final_training")
+
+    best_val_loss = float("inf")
+    patience = 10
+    patience_counter = 0
 
     for epoch in range(NUM_EPOCHS):
         model.train()
@@ -228,7 +237,7 @@ if __name__ == "__main__":
         for noisy_imgs, clean_imgs in train_loader:
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
             outputs = model(noisy_imgs)
-            loss = best_params["l1_weight"] * nn.L1Loss()(outputs, clean_imgs) + (1 - best_params["l1_weight"]) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+            loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -242,21 +251,23 @@ if __name__ == "__main__":
             for noisy_imgs, clean_imgs in val_loader:
                 noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
                 outputs = model(noisy_imgs)
-                loss = best_params["l1_weight"] * nn.L1Loss()(outputs, clean_imgs) + (1 - best_params["l1_weight"]) * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+                loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
 
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            torch.onnx.export(model, torch.randn(1, 3, 256, 256).to(device), ONNX_PATH, input_names=["input"], output_names=["output"], opset_version=17)
+            print(f"Model exported to {ONNX_PATH}")
+            print(f"Epoch {epoch + 1}: Validation loss improved to {val_loss:.4f}. Model saved.")
+        else:
+            patience_counter += 1
+            print(f"Epoch {epoch + 1}: No improvement. Patience {patience_counter}/{patience}.")
+
+        if patience_counter >= patience:
+            print("Early stopping triggered.")
+            break
+
     writer.close()
-    dummy_input = torch.randn(1, 3, 256, 256).to(device)
-    onnx_path = "denoising_autoencoder.onnx"
-    torch.onnx.export(
-        model,
-        dummy_input,
-        onnx_path,
-        input_names=["noisy_input"],
-        output_names=["denoised_output"],
-        dynamic_axes={"noisy_input": {0: "batch_size"}, "denoised_output": {0: "batch_size"}},
-        opset_version=17
-    )
-    print(f"Model exported to {onnx_path}")
