@@ -177,4 +177,3 @@ noisy/
 ground_truth/
 scenes/
 runs/
-optuna_study.db

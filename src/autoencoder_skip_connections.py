@@ -140,19 +140,20 @@ class DenoisingAutoencoder(nn.Module):
 # Optuna Objective
 # ------------------------------
 def objective(trial):
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
+    batch_size = trial.suggest_categorical("batch_size", [16])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    base_channels = trial.suggest_categorical("base_channels", [32, 64, 128])
+    base_channels = trial.suggest_categorical("base_channels", [32, 64])
     beta1 = trial.suggest_float("beta1", 0.8, 0.99)
     beta2 = trial.suggest_float("beta2", 0.9, 0.999)
     eps = trial.suggest_float("eps", 1e-9, 1e-6, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+    base_channels=32
 
     transform = transforms.ToTensor()
     train_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/train", "../dataset/patches/ground_truth/train", transform)
     val_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/val", "../dataset/patches/ground_truth/val", transform)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=base_channels).to(device)
@@ -173,6 +174,7 @@ def objective(trial):
             train_loss += loss.item()
         train_loss /= len(train_loader)
         writer.add_scalar("Loss/train", train_loss, epoch)
+        print(f"Loss/train: {train_loss}, epoch: {epoch}")
 
         model.eval()
         val_loss = 0.0
@@ -184,6 +186,7 @@ def objective(trial):
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
+        print(f"Loss/val: {val_loss}, epoch: {epoch}")
 
     for key, val in trial.params.items():
         writer.add_scalar(f"Hyperparams/{key}", val, trial.number)
@@ -195,10 +198,17 @@ def objective(trial):
 # Run Optuna & Final Training
 # ------------------------------
 if __name__ == "__main__":
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     if USE_OPTUNA or not os.path.exists(CONFIG_PATH):
         study_name = "denoising_autoencoder_study"
         storage = "sqlite:///optuna_study.db"
         study = optuna.create_study(direction="minimize", study_name=study_name, storage=storage, load_if_exists=True)
+
+        # rerun aborted trial
+        trials = study.get_trials(deepcopy=False)
+        if trials[-1].state in [optuna.trial.TrialState.FAIL, optuna.trial.TrialState.PRUNED]:
+            study.enqueue_trial(trials[-1].params)
+
         tb_callback = TensorBoardCallback("./runs/optuna_tensorboard", metric_name="val_loss")
         study.optimize(objective, n_trials=30, callbacks=[tb_callback])
 
@@ -214,8 +224,8 @@ if __name__ == "__main__":
     transform = transforms.ToTensor()
     train_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/train", "../dataset/patches/ground_truth/train", transform)
     val_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/val", "../dataset/patches/ground_truth/val", transform)
-    train_loader = DataLoader(train_dataset, batch_size=best_params["batch_size"], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=best_params["batch_size"], shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=best_params["batch_size"], shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=best_params["batch_size"], shuffle=False, num_workers=0)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenoisingAutoencoder(base_channels=best_params["base_channels"]).to(device)
