@@ -254,6 +254,7 @@ if __name__ == "__main__":
             train_loss += loss.item()
         train_loss /= len(train_loader)
         writer.add_scalar("Loss/train", train_loss, epoch)
+        print(f"Loss/train: {train_loss}, epoch: {epoch}")
 
         model.eval()
         val_loss = 0.0
@@ -265,6 +266,7 @@ if __name__ == "__main__":
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
+        print(f"Loss/train: {val_loss}, epoch: {epoch}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
