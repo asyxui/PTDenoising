@@ -1,4 +1,8 @@
 import os
+
+os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 import json
 import argparse
 import torch
@@ -140,9 +144,9 @@ class DenoisingAutoencoder(nn.Module):
 # Optuna Objective
 # ------------------------------
 def objective(trial):
-    batch_size = trial.suggest_categorical("batch_size", [16])
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    base_channels = trial.suggest_categorical("base_channels", [32, 64])
+    base_channels = trial.suggest_categorical("base_channels", [32, 64, 128])
     beta1 = trial.suggest_float("beta1", 0.8, 0.99)
     beta2 = trial.suggest_float("beta2", 0.9, 0.999)
     eps = trial.suggest_float("eps", 1e-9, 1e-6, log=True)
@@ -160,14 +164,18 @@ def objective(trial):
     optimizer = optim.Adam(model.parameters(), lr=lr, betas=(beta1, beta2), eps=eps, weight_decay=weight_decay)
     writer = SummaryWriter(log_dir=f"./runs/optuna_trial_{trial.number}")
 
-    num_epochs = 10
+    num_epochs = 100
+    patience = 10
+    best_val_loss = float("inf")
+    patience_counter = 0
+
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
         for noisy_imgs, clean_imgs in train_loader:
             noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
             outputs = model(noisy_imgs)
-            loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+            loss = 0.9 * nn.L1Loss()(outputs, clean_imgs) + 0.1 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -182,11 +190,26 @@ def objective(trial):
             for noisy_imgs, clean_imgs in val_loader:
                 noisy_imgs, clean_imgs = noisy_imgs.to(device), clean_imgs.to(device)
                 outputs = model(noisy_imgs)
-                loss = 0.8 * nn.L1Loss()(outputs, clean_imgs) + 0.2 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
+                loss = 0.9 * nn.L1Loss()(outputs, clean_imgs) + 0.1 * (1 - ssim(outputs, clean_imgs, data_range=1.0, size_average=True))
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
         print(f"Loss/val: {val_loss}, epoch: {epoch}")
+
+        # early stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print(f"Early stopping at epoch {epoch+1}")
+            break
+
+        trial.report(val_loss, epoch)
+        if trial.should_prune():
+            raise optuna.exceptions.TrialPruned()
 
     for key, val in trial.params.items():
         writer.add_scalar(f"Hyperparams/{key}", val, trial.number)
@@ -238,7 +261,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir="./runs/final_training")
 
     best_val_loss = float("inf")
-    patience = 10
+    patience = 15
     patience_counter = 0
 
     for epoch in range(NUM_EPOCHS):
@@ -266,8 +289,9 @@ if __name__ == "__main__":
                 val_loss += loss.item()
         val_loss /= len(val_loader)
         writer.add_scalar("Loss/val", val_loss, epoch)
-        print(f"Loss/train: {val_loss}, epoch: {epoch}")
+        print(f"Loss/val: {val_loss}, epoch: {epoch}")
 
+        # early stopping
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
