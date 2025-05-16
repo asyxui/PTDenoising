@@ -144,14 +144,13 @@ class DenoisingAutoencoder(nn.Module):
 # Optuna Objective
 # ------------------------------
 def objective(trial):
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
+    batch_size = trial.suggest_categorical("batch_size", [32, 64])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    base_channels = trial.suggest_categorical("base_channels", [32, 64, 128])
+    base_channels = trial.suggest_categorical("base_channels", [64, 128])
     beta1 = trial.suggest_float("beta1", 0.8, 0.99)
     beta2 = trial.suggest_float("beta2", 0.9, 0.999)
     eps = trial.suggest_float("eps", 1e-9, 1e-6, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
-    base_channels=32
 
     transform = transforms.ToTensor()
     train_dataset = NoisyCleanPatchDataset("../dataset/patches/noisy/train", "../dataset/patches/ground_truth/train", transform)
@@ -229,8 +228,9 @@ if __name__ == "__main__":
 
         # rerun aborted trial
         trials = study.get_trials(deepcopy=False)
-        if trials[-1].state in [optuna.trial.TrialState.FAIL, optuna.trial.TrialState.PRUNED]:
-            study.enqueue_trial(trials[-1].params)
+        if len(trials) > 0:
+            if trials[-1].state in [optuna.trial.TrialState.FAIL, optuna.trial.TrialState.PRUNED]:
+                study.enqueue_trial(trials[-1].params)
 
         tb_callback = TensorBoardCallback("./runs/optuna_tensorboard", metric_name="val_loss")
         study.optimize(objective, n_trials=30, callbacks=[tb_callback])

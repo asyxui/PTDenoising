@@ -10,7 +10,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description="Test ONNX denoising model on test dataset.")
 parser.add_argument(
     "--model", type=str,
-    default="./models/denoising_autoencoder_250.onnx",
+    default="./models/denoising_autoencoder_400.onnx",
     help="Path to the ONNX model file"
 )
 args = parser.parse_args()
@@ -19,8 +19,8 @@ args = parser.parse_args()
 onnx_model_path = args.model
 noisy_dir = "../dataset/patches/noisy/test"
 clean_dir = "../dataset/patches/ground_truth/test"
-comparison_dir = "onnx_outputs/comparisons"
-denoised_dir = "onnx_outputs/denoised"
+comparison_dir = "onnx_outputs/comparisons2"
+denoised_dir = "onnx_outputs/denoised2"
 os.makedirs(comparison_dir, exist_ok=True)
 os.makedirs(denoised_dir, exist_ok=True)
 
