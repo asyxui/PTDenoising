@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 PATCH_SIZE = 256
 
 # Load ONNX model
-ort_sess = ort.InferenceSession("./models/denoising_autoencoder_250.onnx")
+ort_sess = ort.InferenceSession("./models/denoising_autoencoder.onnx")
 
 # Store zoom level and pan offset
 zoom_factor = 1.0
