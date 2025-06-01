@@ -9,8 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 PATCH_SIZE = 256
 
-# Load ONNX model
-ort_sess = ort.InferenceSession("./models/denoising_autoencoder.onnx")
+# Load ONNX model to run on the GPU
+providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+ort_sess = ort.InferenceSession("./models/denoising_autoencoder.onnx", providers=providers)
 
 # Store zoom level and pan offset
 zoom_factor = 1.0
@@ -23,18 +24,31 @@ def pad_image(img):
     pad_w = (PATCH_SIZE - w % PATCH_SIZE) % PATCH_SIZE
     return cv2.copyMakeBorder(img, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT), pad_h, pad_w
 
+def infer_patch(patch):
+    patch_in = patch.astype(np.float32) / 255.0
+    patch_in = patch_in.transpose(2, 0, 1)[np.newaxis, :]
+    patch_out = ort_sess.run(None, {"input": patch_in})[0][0]
+    return np.clip(patch_out.transpose(1, 2, 0), 0, 1)
+
 def denoise(img):
     padded_img, pad_h, pad_w = pad_image(img)
     h, w, _ = padded_img.shape
     output = np.zeros_like(padded_img, dtype=np.float32)
 
+    patches = []
+    coords = []
+
     for y in range(0, h, PATCH_SIZE):
         for x in range(0, w, PATCH_SIZE):
-            patch = padded_img[y:y+PATCH_SIZE, x:x+PATCH_SIZE].astype(np.float32) / 255.0
-            patch = patch.transpose(2, 0, 1)[np.newaxis, :]
-            patch_out = ort_sess.run(None, {"input": patch})[0][0]
-            patch_out = np.clip(patch_out.transpose(1, 2, 0), 0, 1)
-            output[y:y+PATCH_SIZE, x:x+PATCH_SIZE] = patch_out
+            patch = padded_img[y:y+PATCH_SIZE, x:x+PATCH_SIZE]
+            patches.append(patch)
+            coords.append((y, x))
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(infer_patch, patches))
+
+    for (y, x), patch_out in zip(coords, results):
+        output[y:y+PATCH_SIZE, x:x+PATCH_SIZE] = patch_out
 
     denoised = np.clip(output[:img.shape[0], :img.shape[1]] * 255, 0, 255).astype(np.uint8)
     return denoised
