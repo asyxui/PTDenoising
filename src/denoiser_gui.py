@@ -1,8 +1,10 @@
 import cv2
+import piq
 import numpy as np
 import onnxruntime as ort
 import tkinter as tk
 from tkinter import filedialog
+from torchvision import transforms
 from concurrent.futures import ThreadPoolExecutor
 
 PATCH_SIZE = 256
@@ -58,17 +60,30 @@ def zoom_and_pan(img, zoom, offset):
 def show_images(original, denoised):
     zoom_factor = 1.0
     pan_offset = [0, 0]
+    dragging = False
+    drag_start = (0, 0)
 
-    screen_res = 1280, 720
-    orig_disp, _ = resize_to_screen(original, screen_res)
-    den_disp, _ = resize_to_screen(denoised, screen_res)
-
-    window_name = "Original | Press any key to switch to denoised | Scroll to zoom"
+    h, w = original.shape[:2]
+    window_name = "Denoiser Viewer (Scroll to Zoom | Drag to Pan | Key to Toggle | s to save denoised image | ESC to Exit)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
+    show_denoised = False
+
     def on_mouse(event, x, y, flags, param):
-        nonlocal zoom_factor
-        if event == cv2.EVENT_MOUSEWHEEL:
+        nonlocal zoom_factor, pan_offset, dragging, drag_start
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            dragging = True
+            drag_start = (x, y)
+        elif event == cv2.EVENT_LBUTTONUP:
+            dragging = False
+        elif event == cv2.EVENT_MOUSEMOVE and dragging:
+            dx = x - drag_start[0]
+            dy = y - drag_start[1]
+            pan_offset[0] -= dx
+            pan_offset[1] -= dy
+            drag_start = (x, y)
+        elif event == cv2.EVENT_MOUSEWHEEL:
             if flags > 0:
                 zoom_factor = min(zoom_factor + zoom_step, 5.0)
             else:
@@ -76,15 +91,69 @@ def show_images(original, denoised):
 
     cv2.setMouseCallback(window_name, on_mouse)
 
-    show_denoised = False
+    original_score = compute_brisque_score(original)
+    denoised_score = compute_brisque_score(denoised)
+
     while True:
-        img = den_disp if show_denoised else orig_disp
-        zoomed = zoom_and_pan(img, zoom_factor, pan_offset)
-        cv2.imshow(window_name, zoomed)
+        img = denoised if show_denoised else original
+        img_h, img_w = img.shape[:2]
+
+        # Apply zoom
+        display_w = int(img_w * zoom_factor)
+        display_h = int(img_h * zoom_factor)
+        resized = cv2.resize(img, (display_w, display_h), interpolation=cv2.INTER_LINEAR)
+
+        # Apply pan
+        center_x = display_w // 2 + pan_offset[0]
+        center_y = display_h // 2 + pan_offset[1]
+
+        # Get window size
+        win_w = max(640, cv2.getWindowImageRect(window_name)[2])
+        win_h = max(480, cv2.getWindowImageRect(window_name)[3])
+
+        canvas = np.zeros((win_h, win_w, 3), dtype=np.uint8)
+
+        x1 = center_x - win_w // 2
+        y1 = center_y - win_h // 2
+        x2 = x1 + win_w
+        y2 = y1 + win_h
+
+        # Clamp view window
+        x1 = max(0, min(x1, resized.shape[1] - win_w))
+        y1 = max(0, min(y1, resized.shape[0] - win_h))
+        x2 = x1 + win_w
+        y2 = y1 + win_h
+
+        # Crop the zoomed image
+        cropped = resized[y1:y2, x1:x2]
+
+        # If cropped smaller than canvas (e.g., edges), pad it
+        ch, cw = cropped.shape[:2]
+        canvas[:ch, :cw] = cropped
+
+        label = f"BRISQUE: {denoised_score:.2f} (lower is better)" if show_denoised else f"BRISQUE: {original_score:.2f} (lower is better)"
+        cv2.putText(canvas, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+
+        cv2.imshow(window_name, canvas)
         key = cv2.waitKey(30)
 
-        if key == 27: # ESC
+        if key == 27:  # ESC
             break
+        elif key == ord('s') or key == ord('S'):
+            save_root = tk.Tk()
+            save_root.withdraw()
+            file_path = filedialog.asksaveasfilename(
+                title="Save denoised image",
+                initialfile="denoised_image.png",
+                defaultextension=".png",
+                filetypes=[("PNG Image", "*.png"), ("JPEG Image", "*.jpg *.jpeg")],
+            )
+            save_root.destroy()
+            if file_path:
+                cv2.imwrite(file_path, denoised)
+                print(f"Denoised image saved to {file_path}")
+            else:
+                print("Switch to denoised image first (press any key), then press S to save.")
         elif key != -1:
             show_denoised = not show_denoised
 
@@ -99,6 +168,11 @@ def select_and_process():
         img = cv2.imread(path)
         denoised = denoise(img)
         show_images(img, denoised)
+
+def compute_brisque_score(img):
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_tensor = transforms.ToTensor()(img_rgb).unsqueeze(0)  # [1, 3, H, W], float32 in [0,1]
+    return piq.brisque(img_tensor, data_range=1.0).item()
 
 if __name__ == "__main__":
     select_and_process()

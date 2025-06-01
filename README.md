@@ -5,7 +5,7 @@ This project uses a custom dataset consisting of noisy and ground truth image pa
 - Noisy images: Rendered at low sample counts (2, 5, 10, 50, 100, 200, 500 samples).
 - Ground truth images: Rendered at a high sample count with the built-in Blender denoiser enabled to approximate clean results.
 
-![visualization of noise levels](./docs/dataset_visualization.png)
+![visualization of noise levels](./docs/media/dataset_visualization.png)
 
 Each scene is rendered from multiple camera angles, and images are exported at 1024×1024 resolution. These are then split into 16 non-overlapping 256×256 patches. The patches are saved with filenames that encode the scene, camera index, sample count (for noisy images), and patch index.
 
