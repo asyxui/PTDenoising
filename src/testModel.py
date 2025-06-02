@@ -11,7 +11,7 @@ from pytorch_msssim import ssim
 
 # --- CLI Arguments ---
 parser = argparse.ArgumentParser(description="Test ONNX denoising model on test dataset.")
-parser.add_argument("--model", type=str, default="./models/denoising_autoencoder_400.onnx", help="Path to the ONNX model file")
+parser.add_argument("--model", type=str, default="./models/denoising_autoencoder.onnx", help="Path to the ONNX model file")
 args = parser.parse_args()
 
 # --- Directories ---
