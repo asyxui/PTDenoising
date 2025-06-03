@@ -3,7 +3,7 @@ This repository contains a student project developed as part of a Bachelor's the
 
 ## 📦 Downloads Available
 
-You can download the trained ONNX model and the Blender scenes used for dataset generation from the [github release](https://github.com/asyxui/PTDenoising/releases/tag/v1.0).
+You can download the trained ONNX model from the [github release](https://github.com/asyxui/PTDenoising/releases/tag/v1.0).
 
 
 ## Autoencoder model
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 cd dataset
 blender -b -P .\blenderDataset.py
 ```
-Blender scenes that will be used for the dataset are stored in /dataset/scenes. You should add this folder and add blender scenes to expand the dataset. I suggest packing all resources into the .blend files. You can download the scenes that I used in the [github release](https://github.com/asyxui/PTDenoising/releases/tag/v1.0). Make sure to store them in a folder test, train or val. (for example /dataset/scenes/train/scene.blend)
+Blender scenes that will be used for the dataset are stored in /dataset/scenes. You should add this folder and add blender scenes to expand the dataset, I may not share the scenes that were used by me because of the licenses. I suggest packing all resources into the .blend files. Make sure to store them in a folder test, train or val. (for example /dataset/scenes/train/scene.blend)
 
 Once the dataset is created, it can be patched into smaller images for the models using the createPatches.py
 ```sh
