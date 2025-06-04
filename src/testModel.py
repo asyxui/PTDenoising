@@ -107,5 +107,16 @@ plt.tight_layout()
 plt.savefig("onnx_outputs/loss_plot.png")
 plt.close()
 
+# --- Print Average Losses ---
+avg_l1_noisy = df["l1_noisy"].mean()
+avg_l1_denoised = df["l1_denoised"].mean()
+avg_ssim_noisy = df["ssim_noisy"].mean()
+avg_ssim_denoised = df["ssim_denoised"].mean()
+
+print(f"\nAverage L1 Loss (Noisy):    {avg_l1_noisy:.6f}")
+print(f"Average L1 Loss (Denoised): {avg_l1_denoised:.6f}")
+print(f"Average SSIM (Noisy):       {avg_ssim_noisy:.6f}")
+print(f"Average SSIM (Denoised):    {avg_ssim_denoised:.6f}")
+
 print("✓ CSV saved to onnx_outputs/loss_metrics.csv")
 print("✓ Plot saved to onnx_outputs/loss_plot.png")

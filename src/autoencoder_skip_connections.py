@@ -1,5 +1,6 @@
 import os
 
+# this is to restrict the gpu usage on the MLMP platform.
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
