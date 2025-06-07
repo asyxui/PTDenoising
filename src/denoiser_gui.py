@@ -8,6 +8,7 @@ from torchvision import transforms
 from concurrent.futures import ThreadPoolExecutor
 
 PATCH_SIZE = 256
+OVERLAP = 16
 
 # Load ONNX model to run on the GPU
 providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
@@ -33,23 +34,34 @@ def infer_patch(patch):
 def denoise(img):
     padded_img, pad_h, pad_w = pad_image(img)
     h, w, _ = padded_img.shape
+
+    step = PATCH_SIZE - OVERLAP
+
     output = np.zeros_like(padded_img, dtype=np.float32)
+    weight = np.zeros_like(padded_img, dtype=np.float32)
 
-    patches = []
-    coords = []
+    hann_1d = np.hanning(PATCH_SIZE)
+    window = np.outer(hann_1d, hann_1d).astype(np.float32)[..., np.newaxis]
 
-    for y in range(0, h, PATCH_SIZE):
-        for x in range(0, w, PATCH_SIZE):
+    # Calculate patch start coordinates ensuring coverage of full image
+    ys = list(range(0, h - PATCH_SIZE + 1, step))
+    xs = list(range(0, w - PATCH_SIZE + 1, step))
+
+    # Make sure last patch covers the edge
+    if ys[-1] != h - PATCH_SIZE:
+        ys.append(h - PATCH_SIZE)
+    if xs[-1] != w - PATCH_SIZE:
+        xs.append(w - PATCH_SIZE)
+
+    for y in ys:
+        for x in xs:
             patch = padded_img[y:y+PATCH_SIZE, x:x+PATCH_SIZE]
-            patches.append(patch)
-            coords.append((y, x))
+            patch_out = infer_patch(patch)
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(executor.map(infer_patch, patches))
+            output[y:y+PATCH_SIZE, x:x+PATCH_SIZE] += patch_out * window
+            weight[y:y+PATCH_SIZE, x:x+PATCH_SIZE] += window
 
-    for (y, x), patch_out in zip(coords, results):
-        output[y:y+PATCH_SIZE, x:x+PATCH_SIZE] = patch_out
-
+    output /= weight
     denoised = np.clip(output[:img.shape[0], :img.shape[1]] * 255, 0, 255).astype(np.uint8)
     return denoised
 
