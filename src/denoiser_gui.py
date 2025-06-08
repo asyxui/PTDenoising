@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import filedialog
 from torchvision import transforms
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 PATCH_SIZE = 256
 OVERLAP = 16
@@ -32,9 +33,10 @@ def infer_patch(patch):
     return np.clip(patch_out.transpose(1, 2, 0), 0, 1)
 
 def denoise(img):
+    start_time = time.time()
+
     padded_img, pad_h, pad_w = pad_image(img)
     h, w, _ = padded_img.shape
-
     step = PATCH_SIZE - OVERLAP
 
     output = np.zeros_like(padded_img, dtype=np.float32)
@@ -53,16 +55,27 @@ def denoise(img):
     if xs[-1] != w - PATCH_SIZE:
         xs.append(w - PATCH_SIZE)
 
-    for y in ys:
-        for x in xs:
-            patch = padded_img[y:y+PATCH_SIZE, x:x+PATCH_SIZE]
-            patch_out = infer_patch(patch)
+    coords = [(y, x) for y in ys for x in xs]
 
+    def process(coord):
+        y, x = coord
+        patch = padded_img[y:y+PATCH_SIZE, x:x+PATCH_SIZE]
+        patch_out = infer_patch(patch)
+        return y, x, patch_out
+
+    with ThreadPoolExecutor() as executor:
+        results = executor.map(process, coords)
+
+        for y, x, patch_out in results:
             output[y:y+PATCH_SIZE, x:x+PATCH_SIZE] += patch_out * window
             weight[y:y+PATCH_SIZE, x:x+PATCH_SIZE] += window
 
     output /= weight
     denoised = np.clip(output[:img.shape[0], :img.shape[1]] * 255, 0, 255).astype(np.uint8)
+
+    end_time = time.time()
+    print(f"Denoising time: {end_time - start_time:.2f} seconds")
+
     return denoised
 
 def resize_to_screen(img, screen_size):
@@ -163,7 +176,7 @@ def show_images(original, denoised):
         cv2.imshow(window_name, canvas)
         key = cv2.waitKey(30)
 
-        if key == 27:  # ESC
+        if key == 27:  # Escape
             break
         elif key == ord('s') or key == ord('S'):
             save_root = tk.Tk()
@@ -185,7 +198,6 @@ def show_images(original, denoised):
 
     cv2.destroyAllWindows()
 
-
 def select_and_process():
     root = tk.Tk()
     root.withdraw()
@@ -197,7 +209,7 @@ def select_and_process():
 
 def compute_brisque_score(img):
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img_tensor = transforms.ToTensor()(img_rgb).unsqueeze(0)  # [1, 3, H, W], float32 in [0,1]
+    img_tensor = transforms.ToTensor()(img_rgb).unsqueeze(0) # [1, 3, H, W], float32 in [0,1]
     return piq.brisque(img_tensor, data_range=1.0).item()
 
 if __name__ == "__main__":
